@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network AIOps Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .container-flex { display: flex; height: 100vh; }
+        .left-pane { width: 300px; background: #f8f9fa; padding: 2rem 1rem; border-right: 1px solid #dee2e6; }
+        .right-pane { flex: 1; padding: 2rem; overflow-y: auto; }
+        .charts-grid { display: flex; flex-wrap: wrap; gap: 2rem; }
+        .chart-container { flex: 1 1 45%; max-width: 45%; min-width: 300px; margin-bottom: 2rem; }
+        canvas { max-width: 100%; height: 250px !important; }
+        .chart-title { font-weight: 600; margin-bottom: 0.5rem; }
+        .action-btns { margin-bottom: 2rem; }
+        .device-section { margin-top: 2rem; }
+        .anomaly-section { margin-top: 1.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container-flex">
+        <div class="left-pane">
+            <div class="action-btns">
+                <form method="post">
+                    <button type="submit" name="show_kpi" value="true" class="btn btn-primary mb-2 w-100">Show KPI Data</button>
+                    <button type="submit" name="show_anomalies" value="true" class="btn btn-danger mb-2 w-100">Show Anomalies</button>
+                    <button type="submit" name="reset" value="true" class="btn btn-secondary mb-2 w-100">Reset</button>
+                    <div class="device-section">
+                        <label class="form-label">Select the Network Element</label>
+                        <select name="device" class="form-select mb-3" onchange="this.form.submit()">
+                            {% for device in devices %}
+                                <option value="{{ device }}" {% if device == selected_device %}selected{% endif %}>{{ device }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if show_anomalies and anomaly_types %}
+                    <div class="anomaly-section">
+                        <label class="form-label">Select Anomaly</label>
+                        <select name="anomaly" class="form-select" onchange="this.form.submit()">
+                            <option value="">-- All Anomalies --</option>
+                            {% for anomaly in anomaly_types %}
+                                <option value="{{ anomaly }}" {% if anomaly == selected_anomaly %}selected{% endif %}>{{ anomaly }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        <div class="right-pane">
+            <h4>Device: {{ selected_device }}</h4>
+            {% if not reset %}
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Latency (ms)</div>
+                    <canvas id="latencyChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Throughput (Mbps)</div>
+                    <canvas id="throughputChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Packet Loss (%)</div>
+                    <canvas id="packetLossChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Jitter (ms)</div>
+                    <canvas id="jitterChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Signal Strength (dBm)</div>
+                    <canvas id="signalStrengthChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Call Drop</div>
+                    <canvas id="callDropChart"></canvas>
+                </div>
+            </div>
+            <h5>Recent Events</h5>
+            {% if events %}
+            <ul>
+                {% for event in events %}
+                <li>{{ event[0] }} - {{ event[2] }}: {{ event[3] }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>No events available.</p>
+            {% endif %}
+            {% if show_anomalies and anomaly_data %}
+            <div class="mt-4">
+                <h5>Anomaly Data</h5>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Anomaly Type</th>
+                            <th>Root Cause</th>
+                            <th>Recommendation</th>
+                            <th>Operator Feedback</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in anomaly_data %}
+                        <tr>
+                            <td>{{ row[0] }}</td>
+                            <td>{{ row[2] }}</td>
+                            <td>{{ row[3] }}</td>
+                            <td>{{ row[4] }}</td>
+                            <td>{{ row[5] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    {% if not reset %}
+    <script>
+        const kpiData = JSON.parse('{{ kpi_data|safe }}');
+        const showAnomalies = {{ show_anomalies|tojson }};
+        function makeChart(id, label, data, color) {
+            const anomalyIndices = kpiData.anomaly_timestamps ? kpiData.anomaly_timestamps.map(ts => kpiData.timestamps.indexOf(ts)).filter(idx => idx !== -1) : [];
+            const anomalyData = anomalyIndices.map(idx => ({x: kpiData.timestamps[idx], y: data[idx]}));
+            let datasets = [
+                {
+                    label: label,
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: color + '33',
+                    fill: true,
+                    tension: 0.2
+                }
+            ];
+            if (showAnomalies && anomalyData.length > 0) {
+                datasets.push({
+                    label: 'Anomaly',
+                    data: anomalyData,
+                    pointBackgroundColor: '#ff0000',
+                    pointBorderColor: '#ff0000',
+                    showLine: false,
+                    type: 'scatter',
+                    pointRadius: 8,
+                    pointStyle: 'cross', // Use big X mark
+                    borderWidth: 3
+                });
+            }
+            new Chart(document.getElementById(id), {
+                type: 'line',
+                data: {
+                    labels: kpiData.timestamps,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: { x: { display: false } }
+                }
+            });
+        }
+        makeChart('latencyChart', 'Latency (ms)', kpiData.latency, '#007bff');
+        makeChart('throughputChart', 'Throughput (Mbps)', kpiData.throughput, '#28a745');
+        makeChart('packetLossChart', 'Packet Loss (%)', kpiData.packet_loss, '#dc3545');
+        makeChart('jitterChart', 'Jitter (ms)', kpiData.jitter, '#ffc107');
+        makeChart('signalStrengthChart', 'Signal Strength (dBm)', kpiData.signal_strength, '#6f42c1');
+        makeChart('callDropChart', 'Call Drop', kpiData.call_drop, '#343a40');
+    </script>
+    {% endif %}
+</body>
+</html>

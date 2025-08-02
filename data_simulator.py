@@ -1,6 +1,6 @@
 import random
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from utils import DEVICES
 
 DB_PATH = "network_poc.db"
@@ -17,7 +17,7 @@ def simulate_kpi(device_id):
         signal_strength -= random.uniform(15, 40)
     call_drop = random.choice([0, 0, 1])
     return (
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
         device_id,
         latency,
         throughput,
@@ -37,7 +37,7 @@ def simulate_event(device_id):
     if random.random() < 0.08:
         event = random.choice(events)
         return (
-            datetime.utcnow().isoformat(),
+            datetime.now(timezone.utc).isoformat(),
             device_id,
             event[0],
             event[1]

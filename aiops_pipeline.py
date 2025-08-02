@@ -2,7 +2,7 @@ import sqlite3
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from utils import DEVICES, dict_factory
-from datetime import datetime
+from datetime import datetime, timezone
 
 DB_PATH = "network_poc.db"
 
@@ -60,7 +60,7 @@ def log_aiops_action(device_id, anomaly_type, root_cause, recommendation, operat
     conn.execute("""
         INSERT INTO aiops_actions (timestamp, device_id, anomaly_type, root_cause, recommendation, operator_feedback)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (datetime.utcnow().isoformat(), device_id, anomaly_type, root_cause, recommendation, operator_feedback))
+    """, (datetime.now(timezone.utc).isoformat(), device_id, anomaly_type, root_cause, recommendation, operator_feedback))
     conn.commit()
     conn.close()
 
